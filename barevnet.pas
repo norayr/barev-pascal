@@ -274,6 +274,10 @@ function TBarevSocketManager.SetNonBlocking(Socket: TSocket): Boolean;
 var
   Flags: Integer;
 {$ENDIF}
+{$IFDEF WINDOWS}
+var
+  NonBlock: u_long;
+{$ENDIF}
 begin
   Result := False;
 
@@ -284,10 +288,11 @@ begin
   if Flags < 0 then Exit;
 
   Result := FpFcntl(Socket, F_SETFL, Flags or O_NONBLOCK) >= 0;
-  {$ELSE}
-  // Windows implementation would use ioctlsocket
-  Log('WARN', 'SetNonBlocking not fully implemented on this platform');
-  Result := True; // Pretend success for now
+  {$ENDIF}
+
+  {$IFDEF WINDOWS}
+  NonBlock := 1;
+  Result := ioctlsocket(Socket, FIONBIO, @NonBlock) = 0;
   {$ENDIF}
 end;
 
@@ -301,6 +306,7 @@ begin
 
   if Socket < 0 then Exit;
 
+  {$IFDEF UNIX}
   fpFD_ZERO(FDSet);
   fpFD_SET(Socket, FDSet);
 
@@ -310,6 +316,17 @@ begin
   SelectResult := fpSelect(Socket + 1, @FDSet, nil, nil, @TimeVal);
 
   Result := (SelectResult > 0) and (fpFD_ISSET(Socket, FDSet) <> 0);
+  {$ELSE}
+  FD_ZERO(FDSet);
+  FD_SET(Socket, FDSet);
+
+  TimeVal.tv_sec := TimeoutMS div 1000;
+  TimeVal.tv_usec := (TimeoutMS mod 1000) * 1000;
+
+  SelectResult := WinSock2.select(Socket + 1, @FDSet, nil, nil, @TimeVal);
+
+  Result := (SelectResult > 0) and FD_ISSET(Socket, FDSet);
+  {$ENDIF}
 end;
 
 function TBarevSocketManager.IsSocketWritable(Socket: TSocket; TimeoutMS: Integer): Boolean;
@@ -322,6 +339,7 @@ begin
 
   if Socket < 0 then Exit;
 
+  {$IFDEF UNIX}
   fpFD_ZERO(FDSet);
   fpFD_SET(Socket, FDSet);
 
@@ -331,6 +349,17 @@ begin
   SelectResult := fpSelect(Socket + 1, nil, @FDSet, nil, @TimeVal);
 
   Result := (SelectResult > 0) and (fpFD_ISSET(Socket, FDSet) <> 0);
+  {$ELSE}
+  FD_ZERO(FDSet);
+  FD_SET(Socket, FDSet);
+
+  TimeVal.tv_sec := TimeoutMS div 1000;
+  TimeVal.tv_usec := (TimeoutMS mod 1000) * 1000;
+
+  SelectResult := WinSock2.select(Socket + 1, nil, @FDSet, nil, @TimeVal);
+
+  Result := (SelectResult > 0) and FD_ISSET(Socket, FDSet);
+  {$ENDIF}
 end;
 
 function TBarevSocketManager.SendData(Socket: TSocket; const Data: string): Integer;

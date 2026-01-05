@@ -195,7 +195,9 @@ uses
 {$IFDEF UNIX}
   BaseUnix,
 {$ENDIF}
-
+{$IFDEF WINDOWS}
+  WinSock2,
+{$ENDIF}
   StrUtils;
 
 
@@ -708,7 +710,15 @@ begin
 
   R := fpSelect(LSock + 1, @FDS, nil, nil, @TV);
   if R <= 0 then Exit(False);
+  {$ELSE}
+  // Windows: WinSock2 select
+  FD_ZERO(FDS);
+  FD_SET(LSock, FDS);
+  TV.tv_sec := TimeoutSec;
+  TV.tv_usec := 0;
 
+  R := WinSock2.select(LSock + 1, @FDS, nil, nil, @TV);
+  if R <= 0 then Exit(False);
   {$ENDIF}
 
   CSock := fpAccept(LSock, nil, nil);
