@@ -718,7 +718,10 @@ end;
 function TBarevFTManager.ConnectTCPv6(const Host: string; Port: Word; out Sock: TSocket): Boolean;
 var
   S: TSocket;
-  Addr: TInetSockAddr6;
+  LocalAddr, RemoteAddr: TInetSockAddr6;
+  LocalPort: Word;
+  Opt: LongInt;
+  BindSuccess: Boolean;
 begin
   Result := False;
   Sock := -1;
@@ -726,12 +729,42 @@ begin
   S := fpSocket(AF_INET6, SOCK_STREAM, 0);
   if S = -1 then Exit;
 
-  FillChar(Addr, SizeOf(Addr), 0);
-  Addr.sin6_family := AF_INET6;
-  Addr.sin6_port := htons(Port);
-  Addr.sin6_addr := StrToNetAddr6(Host);
+  // Set SO_REUSEADDR to allow binding to ports we might have just released
+  Opt := 1;
+  fpSetSockOpt(S, SOL_SOCKET, SO_REUSEADDR, @Opt, SizeOf(Opt));
 
-  if fpConnect(S, @Addr, SizeOf(Addr)) = 0 then
+  // Try to bind to a port in our controlled range (50000-50049)
+  BindSuccess := False;
+  for LocalPort := BAREV_FT_PORT_MIN to BAREV_FT_PORT_MAX do
+  begin
+    FillChar(LocalAddr, SizeOf(LocalAddr), 0);
+    LocalAddr.sin6_family := AF_INET6;
+    LocalAddr.sin6_port := htons(LocalPort);
+    // sin6_addr is zeroed by FillChar - binds to any local interface (:: in IPv6)
+
+    if fpBind(S, @LocalAddr, SizeOf(LocalAddr)) = 0 then
+    begin
+      BindSuccess := True;
+      Log('DEBUG', 'FT: Bound source port ' + IntToStr(LocalPort) + ' for outgoing connection');
+      Break;
+    end;
+  end;
+
+  if not BindSuccess then
+  begin
+    Log('ERROR', 'FT: Could not bind to any port in range ' +
+                 IntToStr(BAREV_FT_PORT_MIN) + '-' + IntToStr(BAREV_FT_PORT_MAX));
+    CloseSocket(S);
+    Exit;
+  end;
+
+  // Now connect to remote host
+  FillChar(RemoteAddr, SizeOf(RemoteAddr), 0);
+  RemoteAddr.sin6_family := AF_INET6;
+  RemoteAddr.sin6_port := htons(Port);
+  RemoteAddr.sin6_addr := StrToNetAddr6(Host);
+
+  if fpConnect(S, @RemoteAddr, SizeOf(RemoteAddr)) = 0 then
   begin
     Sock := S;
     Exit(True);

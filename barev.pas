@@ -71,6 +71,8 @@ type
     function GetBuddyByIndex(Index: Integer): TBarevBuddy;
     function FindBuddyByJID(const JID: string): TBarevBuddy;
     function FindBuddyByIP(const IP: string): TBarevBuddy;
+    // This one apparently is not needed because source port is chosen by OS randomly
+    function FindBuddyByIPAndPort(const IP: string; Port: Word): TBarevBuddy;
 
     { Contact list file }
     function LoadContactsFromFile(const FileName: string): Boolean;
@@ -305,23 +307,27 @@ procedure TBarevClient.HandleIncomingConnection;
 var
   NewSocket: TSocket;
   ClientAddr: string;
+  ClientPort: Word;
   Buddy: TBarevBuddy;
   Conn: TBarevConnection;
 begin
-  NewSocket := FSocketManager.AcceptConnection(ClientAddr);
+  NewSocket := FSocketManager.AcceptConnection(ClientAddr, ClientPort);
   if NewSocket < 0 then Exit;
 
-  Log('INFO', 'Incoming connection from ' + ClientAddr);
+  Log('INFO', 'Incoming connection from ' + ClientAddr + ':' + IntToStr(ClientPort));
 
-  // Try to find buddy by IP
+  // SECURITY: Find buddy by BOTH IP and Port
+  // Buddy := FindBuddyByIPAndPort(ClientAddr, ClientPort);
+  // Silly me! Above does not make sense because source port is randomly chosen by the OS.
   Buddy := FindBuddyByIP(ClientAddr);
 
-  Log('INFO', 'Incoming connection from ' + ClientAddr +
+  Log('INFO', 'Incoming connection from ' + ClientAddr + ':' + IntToStr(ClientPort) +
            ' buddy=' + BoolToStr(Assigned(Buddy), True));
 
   if not Assigned(Buddy) then
   begin
-    Log('WARN', 'Connection from unknown IP: ' + ClientAddr + ', closing');
+    Log('WARN', 'Security: Connection from unknown IP:Port ' + ClientAddr + ':' +
+                IntToStr(ClientPort) + ', closing');
     CloseSocket(NewSocket);
     Exit;
   end;
@@ -538,9 +544,11 @@ begin
   FromJID := ExtractAttribute(XML, 'from');
   Log('INFO', 'Stream start received from ' + FromJID);
 
+  // SECURITY: Validate that the JID in the stream header matches expected buddy
   if not SameText(FromJID, Buddy.JID) then
   begin
-    Log('ERROR', 'JID mismatch! Expected ' + Buddy.JID + ' but got ' + FromJID);
+    Log('ERROR', 'Security: JID mismatch! Expected ' + Buddy.JID + ' but got ' + FromJID);
+    Log('ERROR', 'Security: Rejecting connection from ' + FromJID);
     Conn := Buddy.Connection;
     Buddy.Connection := nil;
     Conn.Free;
@@ -645,6 +653,24 @@ begin
     if TBarevBuddy(FBuddies[i]).JID = JID then
     begin
       Result := TBarevBuddy(FBuddies[i]);
+      Break;
+    end;
+  end;
+end;
+
+// This one apparently is not needed because source port is chosen by OS randomly
+function TBarevClient.FindBuddyByIPAndPort(const IP: string; Port: Word): TBarevBuddy;
+var
+  i: Integer;
+  B: TBarevBuddy;
+begin
+  Result := nil;
+  for i := 0 to FBuddies.Count - 1 do
+  begin
+    B := TBarevBuddy(FBuddies[i]);
+    if (NormalizeIPv6(B.IPv6Address) = NormalizeIPv6(IP)) and (B.Port = Port) then
+    begin
+      Result := B;
       Break;
     end;
   end;
