@@ -6,6 +6,7 @@ UNITS = barevtypes.pas barevxml.pas barevnet.pas barev.pas
 
 all: install-units
 		$(FPC) $(FPCFLAGS) testbarev.pas
+		$(FPC) -fPIC -Cg -Xs libbarev.pas
 #testbarev: $(UNITS) testbarev.pas
 #	$(FPC) $(FPCFLAGS) testbarev.pas
 
