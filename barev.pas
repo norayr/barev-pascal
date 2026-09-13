@@ -46,6 +46,7 @@ type
     function GetMyJID_Internal: string;
     function GetMyIPv6_Internal: string;
     procedure SendRawToBuddy(Buddy: TBarevBuddy; const Data: string);
+    procedure SendPingToBuddy(Buddy: TBarevBuddy);
     function SendToBuddy(Buddy: TBarevBuddy; const Stanza: string): Boolean;
     procedure HandleIncomingConnection;
     procedure HandleBuddyConnection(Buddy: TBarevBuddy);
@@ -686,7 +687,11 @@ begin
         TriggerBuddyStatus(Buddy, Buddy.Status, bsOffline);
         Buddy.Status := bsOffline;
       end;
-    end;
+    end
+    // No ping outstanding: send one if the connection has been idle.
+    else if (Conn.LastPingTime = 0) and Conn.StreamStartReceived and
+            (SecondsBetween(Now, Buddy.LastActivity) > PING_INTERVAL) then
+      SendPingToBuddy(Buddy);
     Exit;
   end;
 
@@ -719,6 +724,7 @@ begin
   // Process received data
   Buddy.LastActivity := Now;
   Buddy.PingFailures := 0; // Reset on any activity
+  Conn.LastPingTime := 0;  // Any traffic proves the peer is alive
   ProcessReceivedData(Buddy, Data);
 end;
 
@@ -968,6 +974,24 @@ begin
     end;
   end;
 
+end;
+
+procedure TBarevClient.SendPingToBuddy(Buddy: TBarevBuddy);
+var
+  PingID: string;
+  PingXML: string;
+begin
+  if not Assigned(Buddy.Connection) then Exit;
+
+  PingID := GenerateID('ping');
+  PingXML := BuildPing(FMyJID, Buddy.JID, PingID);
+
+  if FSocketManager.SendData(Buddy.Connection.Socket, PingXML) > 0 then
+  begin
+    Buddy.Connection.LastPingID := PingID;
+    Buddy.Connection.LastPingTime := Now;
+    Log('DEBUG', 'Sent ping to ' + Buddy.JID + ' ID: ' + PingID);
+  end;
 end;
 
 procedure TBarevClient.HandlePing(Buddy: TBarevBuddy; const XML: string);
