@@ -7,7 +7,7 @@ A FreePascal implementation of the Barev protocol - a simplified peer-to-peer XM
 Barev enables direct messaging between nodes on Yggdrasil networks without central servers, using a "one pipe per buddy" connection model.
 
 - **JID Format**: `localpart@yggdrasil_ipv6_address`
-- **Port**: 5299 (default, configurable)
+- **Port**: 1377 (default, configurable)
 - **Protocol**: TCP over IPv6 (Yggdrasil addresses only)
 - **Security**: Provided by Yggdrasil network encryption
 
@@ -66,22 +66,22 @@ var
 begin
   // Create client with your nick and Yggdrasil IPv6
   Client := TBarevClient.Create('mynick', '201:af82:9f2f:7809::1');
-  
+
   // Set up event handlers
   Client.OnMessageReceived := @OnMessageReceived;
   Client.OnBuddyStatus := @OnBuddyStatus;
   Client.OnLog := @OnLog;
-  
+
   // Start listening
   if not Client.Start then
     WriteLn('Failed to start');
-  
+
   // Add a buddy
   Buddy := Client.AddBuddy('friend', '201:7a74:aa1e:101a::a1');
-  
+
   // Connect to buddy
   Client.ConnectToBuddy(Buddy.JID);
-  
+
   // Main loop
   while Running do
   begin
@@ -89,7 +89,7 @@ begin
     // Your application logic here
     Sleep(100);
   end;
-  
+
   // Cleanup
   Client.Stop;
   Client.Free;
@@ -113,7 +113,7 @@ Then provides an interactive command-line interface.
 ```
 help                   - Show help
 add <nick@ipv6>        - Add a buddy
-list                   - List all buddies  
+list                   - List all buddies
 connect <nick@ipv6>    - Connect to a buddy
 msg <nick@ipv6> <text> - Send a message
 status <status> [msg]  - Set your status (available/away/dnd)
